@@ -95,5 +95,79 @@ bool boggleHelper(const std::set<std::string>& dict, const std::set<std::string>
 								   std::string word, std::set<std::string>& result, unsigned int r, unsigned int c, int dr, int dc)
 {
 //add your solution here!
+// out of bounds check
 
+
+//if find prefix and word
+// if recursive call gives longer word insert that one 
+// if not then insert shorter one
+
+//   word += board[r][c];
+
+//   if (dict.find(word) != dict.end() && word.size() > 1) {
+//      if (prefix.find(word) != prefix.end()) {
+//         bool otherWord = false;
+//         for (auto& w:result) {
+//           if (w.size() > word.size() && w.find(word) == 0) {
+//             otherWord = true;
+//             break;
+//           }
+//         }
+
+//         if (!otherWord) {
+//           auto it = result.begin();
+//           while (it!= result.end()) {
+//             if (word.find(*it) == 0) {
+//                 it = result.erase(it);
+//               } else {
+//                 ++it;
+//               }
+//           }
+//           result.insert(word);
+//         }
+//      } else {
+//        return false;
+//      }
+//   }
+
+
+//   unsigned int newR = r + dr;
+//   unsigned int newC = c + dc;
+
+//   if (newR >=0 && newR < board.size() && newC >= 0 && newC < board.size()) {
+//       if (boggleHelper(dict, prefix, board, word, result, newR, newC, dr, dc)) {
+//         return true;
+//       }
+//   }
+
+//   return dict.find(word) != dict.end();
+// }
+
+
+
+  if (r >= board[0].size() || c >= board.size()) {
+    if (dict.find(word) == dict.end()) {
+        return false;
+    } else {
+      result.insert(word);
+      return true;
+    }
+   }
+
+  if (prefix.find(word) == prefix.end()) {
+    return false;
+  }
+
+  word += board[r][c];
+
+  unsigned int newR = r + dr;
+  unsigned int newC = c + dc;
+  bool longerWord = boggleHelper(dict, prefix, board, word, result, newR, newC, dr, dc);
+  if (!longerWord && dict.find(word) != dict.end()) {
+    result.insert(word);
+    return true;
+  } else {
+    return longerWord;
+  }
 }
+

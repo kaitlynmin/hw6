@@ -35,7 +35,8 @@ struct LinearProber : public Prober<KeyType> {
     {
         // Complete the condition below that indicates failure
         // to find the key or an empty slot
-        if( /* Fill me in */ ) {
+        
+        if( this->numProbes_ >= this->m_) {
             return this->npos; 
         }
         HASH_INDEX_T loc = (this->start_ + this->numProbes_) % this->m_;
@@ -102,8 +103,12 @@ public:
     // To be completed
     HASH_INDEX_T next() 
     {
-
-
+      if (this->numProbes_ >= this->m_) {
+        return this->npos;
+      }
+      HASH_INDEX_T loc = (this->start_ + (this->numProbes_ * dhstep_)) % this->m_;
+      this->numProbes_++;
+      return loc;
 
     }
 };
@@ -270,7 +275,10 @@ private:
     HASH_INDEX_T mIndex_;  // index to CAPACITIES
 
     // ADD MORE DATA MEMBERS HERE, AS NECESSARY
-
+    double resizeAlpha_;
+    size_t exist_;
+    size_t delete_;
+  
 };
 
 // ----------------------------------------------------------------------------
@@ -290,47 +298,92 @@ const HASH_INDEX_T HashTable<K,V,Prober,Hash,KEqual>::CAPACITIES[] =
 template<typename K, typename V, typename Prober, typename Hash, typename KEqual>
 HashTable<K,V,Prober,Hash,KEqual>::HashTable(
     double resizeAlpha, const Prober& prober, const Hasher& hash, const KEqual& kequal)
-       :  hash_(hash), kequal_(kequal), prober_(prober)
+       :  hash_(hash), kequal_(kequal), prober_(prober), resizeAlpha_(resizeAlpha)
 {
     // Initialize any other data members as necessary
-
+  table_.resize(CAPACITIES[0], NULL);
+  mIndex_ = 0;
+  totalProbes_ = 0;
+  exist_ = 0;
+  delete_ = 0;
 }
 
 // To be completed
 template<typename K, typename V, typename Prober, typename Hash, typename KEqual>
 HashTable<K,V,Prober,Hash,KEqual>::~HashTable()
 {
-
+  for (auto item: table_) {
+    delete item;
+  }
 }
 
 // To be completed
 template<typename K, typename V, typename Prober, typename Hash, typename KEqual>
 bool HashTable<K,V,Prober,Hash,KEqual>::empty() const
 {
-
+  for (auto item: table_) {
+    if (item && !item->deleted) {
+      return false;
+    }
+  }
+  return true;
+  //return exist_ == 0;
 }
 
 // To be completed
 template<typename K, typename V, typename Prober, typename Hash, typename KEqual>
 size_t HashTable<K,V,Prober,Hash,KEqual>::size() const
 {
-
+  size_t count = 0;
+  for (auto item: table_) {
+    if (item && !item->deleted) {
+      ++count;
+    }
+  }
+  return count;
 }
 
 // To be completed
 template<typename K, typename V, typename Prober, typename Hash, typename KEqual>
 void HashTable<K,V,Prober,Hash,KEqual>::insert(const ItemType& p)
 {
+  // size_t maxSize = this->CAPACITIES[mIndex_] * resizeAlpha_;
+  size_t currentSize = exist_ + delete_;
 
+  if (static_cast<double>(currentSize)/this->CAPACITIES[mIndex_] >= resizeAlpha_) {
+     this->resize();
+  }
 
+  HASH_INDEX_T index = probe(p.first);
+
+  if (index == npos) {
+    throw std::logic_error("No available index");
+  }
+  
+  if (table_[index] == NULL) {
+    table_[index] = new HashItem(p);
+    exist_++;
+  } else {
+    table_[index]->item.second = p.second;
+    table_[index]->deleted = false;
+  }
 }
 
 // To be completed
 template<typename K, typename V, typename Prober, typename Hash, typename KEqual>
 void HashTable<K,V,Prober,Hash,KEqual>::remove(const KeyType& key)
 {
+  HASH_INDEX_T index = probe(key);
+  if (index == npos) {
+    return;
+  }
 
-
+  // HashItem* item = internalFind(key);
+  if (this->internalFind(key)) {
+      this->internalFind(key)->deleted = true;
+      exist_--;
+      delete_++;
+  }
 }
 
 
@@ -360,8 +413,10 @@ typename HashTable<K,V,Prober,Hash,KEqual>::ItemType * HashTable<K,V,Prober,Hash
 template<typename K, typename V, typename Prober, typename Hash, typename KEqual>
 const typename HashTable<K,V,Prober,Hash,KEqual>::ValueType& HashTable<K,V,Prober,Hash,KEqual>::at(const KeyType& key) const
 {
-    HashItem const * item = this->internalFind(key);
-    if(item == nullptr) { throw std::out_of_range("Bad key"); }
+    HashItem const* item = this->internalFind(key);
+    if(item == nullptr){
+      throw std::out_of_range("Bad key"); 
+      }
     return item->item.second;
 }
 
@@ -370,7 +425,9 @@ template<typename K, typename V, typename Prober, typename Hash, typename KEqual
 typename HashTable<K,V,Prober,Hash,KEqual>::ValueType& HashTable<K,V,Prober,Hash,KEqual>::at(const KeyType& key)
 {
     HashItem * item = this->internalFind(key);
-    if(item == nullptr) { throw std::out_of_range("Bad key"); }
+    if(item == nullptr) {
+      throw std::out_of_range("Bad key"); 
+      }
     return item->item.second;
 }
 
@@ -404,8 +461,44 @@ typename HashTable<K,V,Prober,Hash,KEqual>::HashItem* HashTable<K,V,Prober,Hash,
 template<typename K, typename V, typename Prober, typename Hash, typename KEqual>
 void HashTable<K,V,Prober,Hash,KEqual>::resize()
 {
+  HASH_INDEX_T newSize = CAPACITIES[mIndex_ + 1];
+  mIndex_++;
 
-    
+  std::vector<HashItem*> oldTable = table_;
+
+  size_t newExist = 0;
+
+  table_.assign(newSize, nullptr);
+
+  for (auto item : oldTable) {
+    if (item != nullptr && !item->deleted) {
+      HASH_INDEX_T index = probe(item->item.first);
+      table_[index] = item;
+      newExist++;
+    } else {
+      if (item != nullptr && item->deleted) {
+        delete item;
+        item = nullptr;
+      }
+    }
+  }
+
+  // for (auto item: table_) {
+  //   delete item;
+  // }
+  exist_ = newExist;
+  delete_ = 0;
+
+  // table_ = std::move(newTable);
+    //table_.swap(newTable);
+
+
+  // for (size_t i =0; i < table_.size(); ++i) {
+  //   if (table_[i]) {
+  //     delete table_[i];
+  //     table_[i] = NULL;
+  //   }
+  // }
 }
 
 // Almost complete
@@ -424,7 +517,7 @@ HASH_INDEX_T HashTable<K,V,Prober,Hash,KEqual>::probe(const KeyType& key) const
         }
         // fill in the condition for this else if statement which should 
         // return 'loc' if the given key exists at this location
-        else if(/* Fill me in */) {
+        else if(table_[loc] != NULL && !table_[loc]->deleted && kequal_(table_[loc]->item.first, key)) {
             return loc;
         }
         loc = prober_.next();
